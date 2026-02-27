@@ -39,7 +39,11 @@ export default function CategoriasPage() {
 
   const categoryById = useMemo(() => {
     if (!catalog) return new Map<string, { name: string; emoji: string }>()
-    return new Map(catalog.categories.map((category) => [category.id, { name: category.name, emoji: category.emoji }] as const))
+    return new Map(
+      catalog.categories.map(
+        (category) => [category.id, { name: category.name, emoji: category.emoji }] as const,
+      ),
+    )
   }, [catalog])
 
   const subcategoryById = useMemo(() => {
@@ -74,7 +78,8 @@ export default function CategoriasPage() {
 
     const filtered = catalog.products.filter((product) => {
       if (selectedCategory !== 'all' && product.categoryId !== selectedCategory) return false
-      if (selectedSubcategory !== 'all' && product.subcategoryId !== selectedSubcategory) return false
+      if (selectedSubcategory !== 'all' && product.subcategoryId !== selectedSubcategory)
+        return false
       if (selectedDietary !== 'all' && !product.dietary.includes(selectedDietary)) return false
       if (priceCap !== null && product.price > priceCap) return false
 
@@ -103,7 +108,16 @@ export default function CategoriasPage() {
       default:
         return filtered.sort((a, b) => Number(b.featured) - Number(a.featured))
     }
-  }, [catalog, priceCap, query, selectedCategory, selectedDietary, selectedSubcategory, sortBy, subcategoryById])
+  }, [
+    catalog,
+    priceCap,
+    query,
+    selectedCategory,
+    selectedDietary,
+    selectedSubcategory,
+    sortBy,
+    subcategoryById,
+  ])
 
   const clearFilters = () => {
     setQuery('')
@@ -118,9 +132,12 @@ export default function CategoriasPage() {
     <main>
       <section className="mx-auto max-w-7xl px-4 py-12 md:px-6">
         <div className="mb-8 rounded-3xl border border-rose-200 bg-gradient-to-r from-rose-100 via-amber-50 to-orange-100 p-6 shadow-sm md:p-8">
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-5xl">Categorias</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-5xl">
+            Categorias
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-700 md:text-base">
-            Explora el catalogo por categoria, subcategoria y preferencias. Filtra rapido y encuentra justo lo que quieres ordenar.
+            Explora el catalogo por categoria, subcategoria y preferencias. Filtra rapido y
+            encuentra justo lo que quieres ordenar.
           </p>
         </div>
 
@@ -131,14 +148,19 @@ export default function CategoriasPage() {
             <aside className="h-fit rounded-3xl border border-rose-100 bg-white p-5 shadow-sm lg:sticky lg:top-24">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-slate-900">Filtros</h2>
-                <button onClick={clearFilters} className="text-xs font-semibold text-rose-700 hover:text-rose-800">
+                <button
+                  onClick={clearFilters}
+                  className="text-xs font-semibold text-rose-700 hover:text-rose-800"
+                >
                   Limpiar
                 </button>
               </div>
 
               <div className="space-y-4">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Busqueda</span>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Busqueda
+                  </span>
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
@@ -149,7 +171,9 @@ export default function CategoriasPage() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</span>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Categoria
+                  </span>
                   <select
                     value={selectedCategory}
                     onChange={(event) => setSelectedCategory(event.target.value)}
@@ -165,7 +189,9 @@ export default function CategoriasPage() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Subcategoria</span>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Subcategoria
+                  </span>
                   <select
                     value={selectedSubcategory}
                     onChange={(event) => setSelectedSubcategory(event.target.value)}
@@ -181,7 +207,9 @@ export default function CategoriasPage() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Dieta</span>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Dieta
+                  </span>
                   <select
                     value={selectedDietary}
                     onChange={(event) => setSelectedDietary(event.target.value)}
@@ -199,7 +227,13 @@ export default function CategoriasPage() {
                 <label className="block">
                   <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <span>Precio maximo</span>
-                    <span>{formatPrice(priceCap ?? maxPrice, catalog.store.locale, catalog.store.currency)}</span>
+                    <span>
+                      {formatPrice(
+                        priceCap ?? maxPrice,
+                        catalog.store.locale,
+                        catalog.store.currency,
+                      )}
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -212,7 +246,9 @@ export default function CategoriasPage() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Orden</span>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Orden
+                  </span>
                   <select
                     value={sortBy}
                     onChange={(event) => setSortBy(event.target.value as SortMode)}
@@ -234,13 +270,19 @@ export default function CategoriasPage() {
                 </p>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {selectedCategory !== 'all' && (
-                    <span className="rounded-full bg-rose-100 px-3 py-1 font-semibold text-rose-700">Categoria activa</span>
+                    <span className="rounded-full bg-rose-100 px-3 py-1 font-semibold text-rose-700">
+                      Categoria activa
+                    </span>
                   )}
                   {selectedSubcategory !== 'all' && (
-                    <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-700">Subcategoria activa</span>
+                    <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-700">
+                      Subcategoria activa
+                    </span>
                   )}
                   {selectedDietary !== 'all' && (
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">Dieta: {selectedDietary}</span>
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
+                      Dieta: {selectedDietary}
+                    </span>
                   )}
                 </div>
               </div>
@@ -279,10 +321,17 @@ export default function CategoriasPage() {
                           <p className="mt-1 text-sm text-slate-600">{product.description}</p>
 
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                            <span className="rounded-full bg-slate-100 px-2 py-1">{product.portions}</span>
-                            <span className="rounded-full bg-slate-100 px-2 py-1">{product.prepHours} hrs</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-1">
+                              {product.portions}
+                            </span>
+                            <span className="rounded-full bg-slate-100 px-2 py-1">
+                              {product.prepHours} hrs
+                            </span>
                             {product.dietary.map((diet) => (
-                              <span key={diet} className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
+                              <span
+                                key={diet}
+                                className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700"
+                              >
                                 {diet}
                               </span>
                             ))}
@@ -290,7 +339,11 @@ export default function CategoriasPage() {
 
                           <div className="mt-4 flex items-center justify-between gap-2">
                             <p className="text-lg font-black text-rose-700">
-                              {formatPrice(product.price, catalog.store.locale, catalog.store.currency)}
+                              {formatPrice(
+                                product.price,
+                                catalog.store.locale,
+                                catalog.store.currency,
+                              )}
                             </p>
                             <div className="flex items-center gap-2">
                               <button
@@ -327,3 +380,6 @@ export default function CategoriasPage() {
     </main>
   )
 }
+
+//VITE_SUPABASE_URL=https://ndoozikgkroopnsizyhr.supabase.co
+//VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_tBqTVEzwSETKOJb1fFe2Bw_vsK8Bbw4
