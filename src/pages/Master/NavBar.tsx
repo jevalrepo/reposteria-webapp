@@ -1,148 +1,365 @@
-import { useState } from 'react'
+﻿import { FormEvent, useEffect, useRef, useState } from 'react'
+import { Link, NavLink } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { useCart } from '../../context/CartContext'
 
-export default function TopNav() {
-  const [active, setActive] = useState('Dashboard')
+const navItemClass = ({ isActive }: { isActive: boolean }) =>
+  isActive ? 'text-rose-700' : 'text-slate-600 hover:text-rose-700'
+
+export default function NavBar() {
   const [open, setOpen] = useState(false)
-  const menus = ['Categorías', 'Ofertas', 'Novedades', 'Nosotros', 'Ayuda']
+  const [cartOpen, setCartOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [loginModalOpen, setLoginModalOpen] = useState(false)
+  const [supportModalOpen, setSupportModalOpen] = useState(false)
+  const [supportName, setSupportName] = useState('')
+  const [supportEmail, setSupportEmail] = useState('')
+  const [supportMessage, setSupportMessage] = useState('')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginStatus, setLoginStatus] = useState('')
+
+  const cartBoxRef = useRef<HTMLDivElement | null>(null)
+  const userBoxRef = useRef<HTMLDivElement | null>(null)
+
+  const { items, totalItems, totalAmount, removeItem } = useCart()
+  const { user, profile, signInWithMagicLink, signOut } = useAuth()
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (cartBoxRef.current && !cartBoxRef.current.contains(event.target as Node)) {
+        setCartOpen(false)
+      }
+      if (userBoxRef.current && !userBoxRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function handleSupportSubmit(event: FormEvent) {
+    event.preventDefault()
+    const subject = encodeURIComponent('Soporte DulceNube')
+    const body = encodeURIComponent(
+      `Nombre: ${supportName}\nEmail: ${supportEmail}\n\nMensaje:\n${supportMessage}`,
+    )
+    window.location.href = `mailto:soporte@dulcenube.com?subject=${subject}&body=${body}`
+  }
+
+  async function handleMagicLinkSignIn(event: FormEvent) {
+    event.preventDefault()
+    setLoginStatus('')
+    const email = loginEmail.trim()
+    if (!email) {
+      setLoginStatus('Ingresa un email valido.')
+      return
+    }
+
+    const { error } = await signInWithMagicLink(email)
+    if (error) {
+      setLoginStatus(error)
+      return
+    }
+
+    setLoginStatus('Te enviamos un Magic Link por correo. Revisa tu bandeja.')
+  }
 
   return (
-    <div className="w-full bg-slate-100 py-3">
-      <div className="mx-auto max-w-screen-2xl rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {/* ¡IMPORTANTE!: nav relativo para anclar el dropdown móvil */}
+    <>
+      <header className="sticky top-0 z-40 border-b border-rose-100 bg-white/95 backdrop-blur">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6" aria-label="Principal">
+          <NavLink to="/" className="text-xl font-black tracking-tight text-rose-700">
+            DulceNube
+          </NavLink>
 
-        <nav className="relative flex items-center justify-between px-4 py-3 md:px-6 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <a href="#" className="group inline-flex items-center gap-2" aria-label="Inicio">
-              <LeafIcon className="h-7 w-7 text-emerald-600 transition-transform group-hover:-rotate-6" />
-              <span className="text-lg font-semibold tracking-tight text-emerald-600">
-                VerdeVivo
-              </span>
-            </a>
-          </div>
-
-          {/* Menú centrado (desktop) */}
-          <ul className="hidden md:flex md:justify-self-center items-center gap-8">
-            {menus.map((label) => (
-              <li key={label} className="relative">
-                <button
-                  onClick={() => setActive(label)}
-                  className={`text-base font-medium transition-colors ${
-                    active === label ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {label}
-                </button>
-                {active === label && (
-                  <span className="absolute -bottom-3 left-0 h-[3px] w-full rounded-full bg-indigo-500" />
-                )}
-              </li>
-            ))}
+          <ul className="hidden items-center gap-6 text-sm font-medium md:flex">
+            <li>
+              <NavLink to="/" className={navItemClass} end>
+                Inicio
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/categorias" className={navItemClass}>
+                Categorias
+              </NavLink>
+            </li>
           </ul>
 
-          {/* Acciones derecha (desktop) */}
-          <div className="hidden md:flex justify-self-end items-center gap-3">
-            <a
-              href="#carrito"
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <CartIcon className="h-4 w-4 text-slate-600" />
-              Carrito
-            </a>
-            <button
-              className="ml-1 inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full ring-1 ring-slate-200"
-              aria-label="Cuenta"
-              title="Cuenta"
-            >
-              <img
-                src="https://i.pravatar.cc/100?img=12"
-                alt="Avatar"
-                className="h-full w-full object-cover"
-              />
-            </button>
-          </div>
-
-          {/* Botón mobile (alineado a la derecha en el banner) */}
-          <div className="ml-auto flex items-center gap-2 md:hidden">
-            <button
-              onClick={() => setOpen((v) => !v)}
-              className="md:hidden inline-flex items-center rounded-md p-2 text-slate-700 ring-1 ring-slate-200"
-              aria-expanded={open}
-              aria-label="Abrir menú"
-            >
-              <BurgerIcon className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Panel mobile dentro del banner (dropdown anclado) */}
-          {open && (
-            <>
-              {/* Backdrop para cerrar al pulsar fuera */}
+          <div className="hidden items-center gap-3 md:flex">
+            <div className="relative" ref={cartBoxRef}>
               <button
-                className="fixed inset-0 z-40 md:hidden"
-                aria-label="Cerrar menú"
-                onClick={() => setOpen(false)}
-              />
-              <div
-                className="absolute right-3 top-3 z-50 w-64 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-lg md:hidden"
-                role="menu"
-                aria-label="Menú móvil"
+                onClick={() => setCartOpen((current) => !current)}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition hover:bg-rose-700"
+                aria-label="Abrir carrito"
+                aria-expanded={cartOpen}
               >
-                <ul className="grid gap-1">
-                  {menus.map((m) => (
-                    <li key={m}>
-                      <a
-                        href="#"
-                        onClick={() => {
-                          setActive(m)
-                          setOpen(false)
-                        }}
-                        className={`block rounded-md px-3 py-2 text-sm font-medium transition ${
-                          active === m
-                            ? 'bg-slate-100 text-slate-900'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                        role="menuitem"
-                      >
-                        {m}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                <CartIcon className="h-5 w-5" />
+                {totalItems > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-bold text-rose-700">
+                    {totalItems}
+                  </span>
+                )}
+              </button>
 
-                <div className="mt-2 flex gap-2">
-                  <a
-                    href="#carrito"
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm"
-                  >
-                    <CartIcon className="h-4 w-4 text-slate-600" />
-                    Carrito
-                  </a>
-                  <button className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-1 ring-slate-200">
-                    <img
-                      src="https://i.pravatar.cc/100?img=12"
-                      alt="Avatar"
-                      className="h-full w-full object-cover"
-                    />
-                  </button>
+              {cartOpen && (
+                <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-rose-100 bg-white p-4 shadow-xl">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900">Carrito</h3>
+                    <span className="text-xs font-semibold text-rose-700">{totalItems} prod.</span>
+                  </div>
+
+                  {items.length === 0 ? (
+                    <p className="rounded-xl bg-rose-50 p-3 text-xs text-slate-600">Tu carrito esta vacio.</p>
+                  ) : (
+                    <ul className="max-h-64 space-y-2 overflow-auto pr-1">
+                      {items.map((item) => (
+                        <li key={item.id} className="flex items-center gap-2 rounded-xl border border-rose-100 p-2">
+                          <img src={item.image} alt={item.name} className="h-12 w-12 rounded-lg object-cover" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold text-slate-900">{item.name}</p>
+                            <p className="text-[11px] text-slate-500">x{item.quantity}</p>
+                          </div>
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            className="rounded-md px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                          >
+                            Quitar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="mt-3 border-t border-rose-100 pt-3">
+                    <p className="mb-3 flex items-center justify-between text-sm font-bold text-slate-900">
+                      <span>Total</span>
+                      <span>${totalAmount.toLocaleString('es-MX')}</span>
+                    </p>
+                    <Link
+                      to="/carrito"
+                      onClick={() => setCartOpen(false)}
+                      className="inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
+                    >
+                      Ir a pagar
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              )}
+            </div>
+
+            <div className="relative" ref={userBoxRef}>
+              <button
+                onClick={() => setUserMenuOpen((current) => !current)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50"
+                aria-label="Abrir menu de usuario"
+                aria-expanded={userMenuOpen}
+              >
+                <UserIcon className="h-5 w-5" />
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 top-14 z-50 w-64 rounded-2xl border border-rose-100 bg-white p-2 shadow-xl">
+                  {!user ? (
+                    <ul className="space-y-1 text-sm">
+                      <li>
+                        <button
+                          onClick={() => {
+                            setLoginModalOpen(true)
+                            setUserMenuOpen(false)
+                          }}
+                          className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-rose-50"
+                        >
+                          Iniciar sesion
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            setSupportModalOpen(true)
+                            setUserMenuOpen(false)
+                          }}
+                          className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-rose-50"
+                        >
+                          Contacto / Soporte
+                        </button>
+                      </li>
+                    </ul>
+                  ) : (
+                    <>
+                      <div className="px-3 py-2 text-xs text-slate-500">{profile?.full_name ?? user.email ?? 'Usuario'}</div>
+                      <ul className="space-y-1 text-sm">
+                        <li>
+                          <Link
+                            to="/mi-cuenta"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-rose-50"
+                          >
+                            Mi cuenta
+                          </Link>
+                        </li>
+                      </ul>
+                      <hr className="my-2 border-rose-100" />
+                      <button
+                        onClick={() => {
+                          signOut().finally(() => setUserMenuOpen(false))
+                        }}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-700 hover:bg-rose-50"
+                      >
+                        Cerrar sesion
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setOpen((current) => !current)}
+            className="inline-flex rounded-lg border border-rose-100 p-2 text-slate-700 md:hidden"
+            aria-label="Abrir menu"
+            aria-expanded={open}
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
         </nav>
-      </div>
-    </div>
+
+        {open && (
+          <div className="border-t border-rose-100 px-4 pb-4 pt-2 md:hidden">
+            <ul className="space-y-2 text-sm font-medium text-slate-700">
+              <li>
+                <NavLink to="/" end onClick={() => setOpen(false)} className="block rounded-lg px-2 py-2 hover:bg-rose-50">
+                  Inicio
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/categorias" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-2 hover:bg-rose-50">
+                  Categorias
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/carrito" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-2 hover:bg-rose-50">
+                  Carrito ({totalItems})
+                </NavLink>
+              </li>
+              {!user ? (
+                <li>
+                  <button
+                    onClick={() => {
+                      setLoginModalOpen(true)
+                      setOpen(false)
+                    }}
+                    className="block w-full rounded-lg px-2 py-2 text-left hover:bg-rose-50"
+                  >
+                    Iniciar sesion
+                  </button>
+                </li>
+              ) : (
+                <li>
+                  <button
+                    onClick={() => {
+                      signOut().finally(() => setOpen(false))
+                    }}
+                    className="block w-full rounded-lg px-2 py-2 text-left hover:bg-rose-50"
+                  >
+                    Cerrar sesion
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+      </header>
+
+      {loginModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Iniciar sesion</h3>
+              <button onClick={() => setLoginModalOpen(false)} className="text-slate-500 hover:text-slate-700">X</button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">Ingresa tu email y te enviaremos un Magic Link.</p>
+            <form onSubmit={handleMagicLinkSignIn} className="space-y-3">
+              <input
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                type="email"
+                required
+                placeholder="tu@email.com"
+                className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+              />
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+              >
+                Enviar Magic Link
+              </button>
+            </form>
+            {loginStatus && <p className="mt-3 text-xs text-rose-700">{loginStatus}</p>}
+          </div>
+        </div>
+      )}
+
+      {supportModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Contacto / Soporte</h3>
+              <button onClick={() => setSupportModalOpen(false)} className="text-slate-500 hover:text-slate-700">X</button>
+            </div>
+
+            <div className="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-slate-700">
+              <p>Email: <a href="mailto:soporte@dulcenube.com" className="font-semibold text-rose-700">soporte@dulcenube.com</a></p>
+              <p className="mt-1">WhatsApp: <a href="https://wa.me/525512345678" target="_blank" rel="noreferrer" className="font-semibold text-rose-700">Abrir chat directo</a></p>
+            </div>
+
+            <form onSubmit={handleSupportSubmit} className="space-y-3">
+              <input
+                value={supportName}
+                onChange={(event) => setSupportName(event.target.value)}
+                required
+                placeholder="Tu nombre"
+                className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+              />
+              <input
+                value={supportEmail}
+                onChange={(event) => setSupportEmail(event.target.value)}
+                type="email"
+                required
+                placeholder="Tu email"
+                className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+              />
+              <textarea
+                value={supportMessage}
+                onChange={(event) => setSupportMessage(event.target.value)}
+                required
+                rows={4}
+                placeholder="Escribe tu mensaje"
+                className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+              />
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+              >
+                Enviar email
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
-/* ========= Iconos ========= */
-function LeafIcon({ className = '' }: { className?: string }) {
+function MenuIcon({ className = '' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M21 3c-5.5.4-9.1 2.2-11.6 4.7C6 11 5.3 15 6.5 17.8c.2.5.8.6 1.2.3 2.3-1.7 4.4-3 7-3.6-1.2 1.5-2.3 2.7-4.3 4.2-.5.4-.3 1.2.3 1.3C16.9 21.9 22 18.5 22 10.5V4a1 1 0 0 0-1-1Z" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+      <path strokeWidth="2" strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
     </svg>
   )
 }
+
 function CartIcon({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -150,16 +367,11 @@ function CartIcon({ className = '' }: { className?: string }) {
     </svg>
   )
 }
-function BurgerIcon({ className = '' }: { className?: string }) {
+
+function UserIcon({ className = '' }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path strokeWidth="2" strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-2.76-3.58-5-8-5Z" />
     </svg>
   )
 }

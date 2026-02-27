@@ -1,8 +1,4 @@
-// src/components/HeroBillboard.tsx
-// Hero “billboard” sin navbar — Tailwind v4
-// Fondo de imagen full-bleed, overlay oscuro, título, texto y CTA centrados.
-
-type Props = {
+﻿type Props = {
   imageUrl?: string
   title?: string
   subtitle?: string
@@ -10,46 +6,33 @@ type Props = {
   onCtaClick?: () => void
 }
 
-export default function HeroBillboard({
-  imageUrl = 'https://images.unsplash.com/photo-1519337265831-281ec6cc8514?q=80&w=1920&auto=format&fit=crop',
-  title = 'New arrivals are here',
-  subtitle = `The new arrivals have, well, newly arrived. Check out the latest options from our
-summer small-batch release while they're still in stock.`,
-  ctaText = 'Shop New Arrivals',
+export default function FrontImage({
+  imageUrl = 'https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?q=80&w=1920&auto=format&fit=crop',
+  title = 'Reposteria artesanal para cada momento',
+  subtitle = 'Pasteles, cupcakes y galletas hechos al momento con ingredientes frescos y decoracion personalizada.',
+  ctaText = 'Ordenar ahora',
   onCtaClick,
 }: Props) {
   return (
-    <section className="relative isolate">
-      {/* Imagen de fondo */}
-      <img src={imageUrl} alt="" className="h-[56vh] w-full object-cover md:h-[70vh] lg:h-[78vh]" />
+    <section className="relative isolate overflow-hidden">
+      <img src={imageUrl} alt="Mesa con postres" className="h-[60vh] w-full object-cover md:h-[72vh]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-rose-900/75 via-rose-900/55 to-amber-800/50" />
 
-      {/* Overlay para legibilidad */}
-      <div className="pointer-events-none absolute inset-0 bg-slate-900/55" />
-
-      {/* Contenido centrado */}
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="mx-auto max-w-3xl px-4 text-center md:max-w-4xl">
-          <h1 className="text-balance text-4xl font-extrabold leading-tight tracking-tight text-white md:text-6xl lg:text-7xl">
-            {title}
-          </h1>
-
-          <p className="mt-4 text-pretty text-base/7 text-white/85 md:mt-6 md:text-lg/8">
-            {subtitle}
+      <div className="absolute inset-0 mx-auto grid max-w-6xl place-items-center px-4 md:px-6">
+        <div className="max-w-2xl text-left text-white">
+          <p className="mb-3 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-widest">
+            Tienda online
           </p>
-
-          <div className="mt-8">
-            <button
-              onClick={onCtaClick}
-              className="inline-flex items-center justify-center rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-lg ring-1 ring-white/40 transition hover:translate-y-[-1px] hover:shadow-xl active:translate-y-0"
-            >
-              {ctaText}
-            </button>
-          </div>
+          <h1 className="text-4xl font-black leading-tight md:text-6xl">{title}</h1>
+          <p className="mt-4 text-base text-rose-50 md:text-lg">{subtitle}</p>
+          <button
+            onClick={onCtaClick}
+            className="mt-8 rounded-2xl bg-white px-6 py-3 text-sm font-bold text-rose-700 transition hover:bg-rose-50"
+          >
+            {ctaText}
+          </button>
         </div>
       </div>
-
-      {/* Borde suave siguiendo la referencia */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white to-transparent" />
     </section>
   )
 }
