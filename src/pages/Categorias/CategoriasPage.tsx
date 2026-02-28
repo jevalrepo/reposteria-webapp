@@ -47,10 +47,12 @@ export default function CategoriasPage() {
   }, [catalog])
 
   const subcategoryById = useMemo(() => {
-    if (!catalog) return new Map<string, string>()
+    if (!catalog) return new Map<string, { name: string; emoji: string }>()
 
     const entries = catalog.categories.flatMap((category) =>
-      category.subcategories.map((subcategory) => [subcategory.id, subcategory.name] as const),
+      category.subcategories.map(
+        (subcategory) => [subcategory.id, { name: subcategory.name, emoji: subcategory.emoji }] as const,
+      ),
     )
 
     return new Map(entries)
@@ -90,7 +92,7 @@ export default function CategoriasPage() {
         product.description,
         product.sku,
         ...product.tags,
-        subcategoryById.get(product.subcategoryId) ?? '',
+        subcategoryById.get(product.subcategoryId)?.name ?? '',
       ]
         .join(' ')
         .toLowerCase()
@@ -133,7 +135,7 @@ export default function CategoriasPage() {
       <section className="mx-auto max-w-7xl px-4 py-12 md:px-6">
         <div className="mb-8 rounded-3xl border border-rose-200 bg-gradient-to-r from-rose-100 via-amber-50 to-orange-100 p-6 shadow-sm md:p-8">
           <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-5xl">
-            Categorias
+            Productos
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-700 md:text-base">
             Explora el catalogo por categoria, subcategoria y preferencias. Filtra rapido y
@@ -199,11 +201,12 @@ export default function CategoriasPage() {
                   >
                     <option value="all">Todas</option>
                     {availableSubcategories.map((subcategory) => (
-                      <option key={subcategory.id} value={subcategory.id}>
+                    <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.emoji ? `${subcategory.emoji} ` : ''}
                         {subcategory.name}
-                      </option>
-                    ))}
-                  </select>
+                    </option>
+                  ))}
+                </select>
                 </label>
 
                 <label className="block">
@@ -295,6 +298,7 @@ export default function CategoriasPage() {
                 <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredProducts.map((product) => {
                     const categoryData = categoryById.get(product.categoryId)
+                    const subcategoryData = subcategoryById.get(product.subcategoryId)
                     return (
                       <article
                         key={product.id}
@@ -307,7 +311,7 @@ export default function CategoriasPage() {
                             className="h-52 w-full object-cover transition duration-500 group-hover:scale-105"
                           />
                           <div className="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-slate-700">
-                            {categoryData?.emoji} {subcategoryById.get(product.subcategoryId)}
+                            {subcategoryData?.emoji || categoryData?.emoji} {subcategoryData?.name}
                           </div>
                           {product.featured && (
                             <div className="absolute right-3 top-3 rounded-full bg-rose-600 px-2 py-1 text-xs font-bold text-white">

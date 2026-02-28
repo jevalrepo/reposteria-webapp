@@ -1,7 +1,8 @@
-﻿export type Subcategory = {
+export type Subcategory = {
   id: string
   name: string
   slug: string
+  emoji: string
 }
 
 export type Category = {
@@ -38,3 +39,4 @@ export type CatalogData = {
   categories: Category[]
   products: Product[]
 }
+

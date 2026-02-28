@@ -17,7 +17,6 @@ export default function ProductoDetallePage() {
   const { addItem } = useCart()
 
   const [quantity, setQuantity] = useState(1)
-  const [dedication, setDedication] = useState('')
 
   if (loading) {
     return (
@@ -59,19 +58,6 @@ export default function ProductoDetallePage() {
   const unitPrice = product.price
   const totalPrice = unitPrice * quantity
 
-  const dedicationText = dedication.trim() ? `Dedicatoria: ${dedication.trim()}` : 'Dedicatoria: sin dedicatoria'
-  const whatsappText = encodeURIComponent(
-    [
-      'Hola, quiero hacer este pedido:',
-      `Producto: ${product.name}`,
-      `SKU: ${product.sku}`,
-      `Cantidad: ${quantity}`,
-      dedicationText,
-      `Total estimado: ${formatPrice(totalPrice, catalog.store.locale, catalog.store.currency)}`,
-    ].join('\n'),
-  )
-  const whatsappUrl = `https://wa.me/525512345678?text=${whatsappText}`
-
   const handleAddToCart = () => {
     addItem({
       productId: product.id,
@@ -79,7 +65,6 @@ export default function ProductoDetallePage() {
       image: product.images[0],
       unitPrice: product.price,
       quantity,
-      dedication,
     })
   }
 
@@ -89,7 +74,7 @@ export default function ProductoDetallePage() {
         ← Volver a categorias
       </Link>
 
-      <section className="mt-4 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <section className="mt-4 grid items-start gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-sm">
           <img src={product.images[0]} alt={product.name} className="h-[420px] w-full object-cover" />
         </div>
@@ -104,7 +89,6 @@ export default function ProductoDetallePage() {
           <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-600">
             <span className="rounded-full bg-slate-100 px-3 py-1">SKU: {product.sku}</span>
             <span className="rounded-full bg-slate-100 px-3 py-1">Porciones: {product.portions}</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1">Entrega: {product.prepHours} hrs</span>
             {product.dietary.map((diet) => (
               <span key={diet} className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">
                 {diet}
@@ -112,10 +96,8 @@ export default function ProductoDetallePage() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">Personaliza tu pedido</h2>
-
-            <div className="mt-4">
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cantidad</p>
               <div className="mt-2 inline-flex items-center rounded-xl border border-rose-100 bg-white">
                 <button
@@ -133,45 +115,19 @@ export default function ProductoDetallePage() {
                 </button>
               </div>
             </div>
-
-            <label className="mt-4 block">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dedicatoria (opcional)</span>
-              <textarea
-                value={dedication}
-                onChange={(event) => setDedication(event.target.value.slice(0, 120))}
-                rows={3}
-                placeholder="Ejemplo: Feliz cumple, Maria"
-                className="mt-2 w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none ring-rose-300 transition focus:ring"
-              />
-              <span className="mt-1 block text-right text-[11px] text-slate-500">{dedication.length}/120</span>
-            </label>
-          </div>
-
-          <div className="mt-6 flex items-end justify-between gap-4">
-            <div>
+            <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-slate-500">Precio unitario</p>
               <p className="text-xl font-black text-slate-900">
                 {formatPrice(unitPrice, catalog.store.locale, catalog.store.currency)}
               </p>
               <p className="text-xs text-slate-500">Total: {formatPrice(totalPrice, catalog.store.locale, catalog.store.currency)}</p>
+              <button
+                onClick={handleAddToCart}
+                className="mt-3 rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+              >
+                Agregar al carrito
+              </button>
             </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
-            >
-              Pedir por WhatsApp
-            </a>
-            <button
-              onClick={handleAddToCart}
-              className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-            >
-              Agregar al carrito
-            </button>
           </div>
         </article>
       </section>

@@ -1,6 +1,7 @@
-﻿import { FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../context/useAuth'
 import { useCart } from '../../context/CartContext'
 
 const navItemClass = ({ isActive }: { isActive: boolean }) =>
@@ -15,14 +16,13 @@ export default function NavBar() {
   const [supportName, setSupportName] = useState('')
   const [supportEmail, setSupportEmail] = useState('')
   const [supportMessage, setSupportMessage] = useState('')
-  const [loginEmail, setLoginEmail] = useState('')
   const [loginStatus, setLoginStatus] = useState('')
 
   const cartBoxRef = useRef<HTMLDivElement | null>(null)
   const userBoxRef = useRef<HTMLDivElement | null>(null)
 
   const { items, totalItems, totalAmount, removeItem } = useCart()
-  const { user, profile, signInWithMagicLink, signOut } = useAuth()
+  const { user, profile, loading, signInWithGoogle, signOut } = useAuth()
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -47,22 +47,13 @@ export default function NavBar() {
     window.location.href = `mailto:soporte@dulcenube.com?subject=${subject}&body=${body}`
   }
 
-  async function handleMagicLinkSignIn(event: FormEvent) {
-    event.preventDefault()
+  async function handleGoogleSignIn() {
     setLoginStatus('')
-    const email = loginEmail.trim()
-    if (!email) {
-      setLoginStatus('Ingresa un email valido.')
-      return
-    }
-
-    const { error } = await signInWithMagicLink(email)
+    const { error } = await signInWithGoogle()
     if (error) {
       setLoginStatus(error)
       return
     }
-
-    setLoginStatus('Te enviamos un Magic Link por correo. Revisa tu bandeja.')
   }
 
   return (
@@ -81,7 +72,7 @@ export default function NavBar() {
             </li>
             <li>
               <NavLink to="/categorias" className={navItemClass}>
-                Categorias
+                Productos
               </NavLink>
             </li>
           </ul>
@@ -141,7 +132,7 @@ export default function NavBar() {
                       onClick={() => setCartOpen(false)}
                       className="inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
                     >
-                      Ir a pagar
+                      Ir al carrito
                     </Link>
                   </div>
                 </div>
@@ -160,7 +151,9 @@ export default function NavBar() {
 
               {userMenuOpen && (
                 <div className="absolute right-0 top-14 z-50 w-64 rounded-2xl border border-rose-100 bg-white p-2 shadow-xl">
-                  {!user ? (
+                  {loading ? (
+                    <div className="px-3 py-2 text-xs text-slate-500">Cargando sesion...</div>
+                  ) : !user ? (
                     <ul className="space-y-1 text-sm">
                       <li>
                         <button
@@ -187,7 +180,7 @@ export default function NavBar() {
                     </ul>
                   ) : (
                     <>
-                      <div className="px-3 py-2 text-xs text-slate-500">{profile?.full_name ?? user.email ?? 'Usuario'}</div>
+                      <div className="px-3 py-2 text-xs text-slate-500">{profile?.nombre_completo ?? user.email ?? 'Usuario'}</div>
                       <ul className="space-y-1 text-sm">
                         <li>
                           <Link
@@ -235,7 +228,7 @@ export default function NavBar() {
               </li>
               <li>
                 <NavLink to="/categorias" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-2 hover:bg-rose-50">
-                  Categorias
+                  Productos
                 </NavLink>
               </li>
               <li>
@@ -243,7 +236,9 @@ export default function NavBar() {
                   Carrito ({totalItems})
                 </NavLink>
               </li>
-              {!user ? (
+              {loading ? (
+                <li className="rounded-lg px-2 py-2 text-slate-500">Cargando sesion...</li>
+              ) : !user ? (
                 <li>
                   <button
                     onClick={() => {
@@ -256,16 +251,23 @@ export default function NavBar() {
                   </button>
                 </li>
               ) : (
-                <li>
-                  <button
-                    onClick={() => {
-                      signOut().finally(() => setOpen(false))
-                    }}
-                    className="block w-full rounded-lg px-2 py-2 text-left hover:bg-rose-50"
-                  >
-                    Cerrar sesion
-                  </button>
-                </li>
+                <>
+                  <li>
+                    <NavLink to="/mi-cuenta" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-2 hover:bg-rose-50">
+                      Mi cuenta
+                    </NavLink>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        signOut().finally(() => setOpen(false))
+                      }}
+                      className="block w-full rounded-lg px-2 py-2 text-left hover:bg-rose-50"
+                    >
+                      Cerrar sesion
+                    </button>
+                  </li>
+                </>
               )}
             </ul>
           </div>
@@ -279,23 +281,16 @@ export default function NavBar() {
               <h3 className="text-lg font-bold text-slate-900">Iniciar sesion</h3>
               <button onClick={() => setLoginModalOpen(false)} className="text-slate-500 hover:text-slate-700">X</button>
             </div>
-            <p className="mb-4 text-sm text-slate-600">Ingresa tu email y te enviaremos un Magic Link.</p>
-            <form onSubmit={handleMagicLinkSignIn} className="space-y-3">
-              <input
-                value={loginEmail}
-                onChange={(event) => setLoginEmail(event.target.value)}
-                type="email"
-                required
-                placeholder="tu@email.com"
-                className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
-              />
-              <button
-                type="submit"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
-              >
-                Enviar Magic Link
-              </button>
-            </form>
+            <p className="mb-4 text-sm text-slate-600">Continua con Google para iniciar sesion.</p>
+            <button
+              onClick={() => {
+                handleGoogleSignIn().catch(() => setLoginStatus('No se pudo iniciar sesion con Google.'))
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <GoogleIcon className="h-4 w-4" />
+              Continuar con Google
+            </button>
             {loginStatus && <p className="mt-3 text-xs text-rose-700">{loginStatus}</p>}
           </div>
         </div>
@@ -375,3 +370,29 @@ function UserIcon({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+
+function GoogleIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.5c-.2 1.2-.9 2.2-1.9 2.9l3.1 2.4c1.8-1.6 2.8-4.1 2.8-7 0-.7-.1-1.5-.2-2.2H12Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.5 0 4.6-.8 6.1-2.2L15 17.4c-.9.6-2 .9-3 .9-2.3 0-4.2-1.5-4.9-3.6l-3.2 2.5A10 10 0 0 0 12 22Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M7.1 14.7A6 6 0 0 1 6.8 13c0-.6.1-1.2.3-1.7L3.9 8.8A10 10 0 0 0 2.8 13c0 1.6.4 3.2 1.1 4.6l3.2-2.5Z"
+      />
+      <path
+        fill="#4285F4"
+        d="M12 7.7c1.4 0 2.6.5 3.6 1.4l2.7-2.7C16.6 4.8 14.5 4 12 4a10 10 0 0 0-8.1 4.8l3.2 2.5c.7-2.1 2.6-3.6 4.9-3.6Z"
+      />
+    </svg>
+  )
+}
+
+
+

@@ -1,5 +1,6 @@
-﻿import { Link } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../../context/useAuth'
 import { useCart } from '../../context/CartContext'
 import { supabase } from '../../lib/supabaseClient'
 import { useCatalog } from '../../hooks/useCatalog'
@@ -12,13 +13,108 @@ function formatPrice(amount: number, locale: string, currency: string): string {
   }).format(amount)
 }
 
+function sanitizeNombreInput(value: string) {
+  return value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, '').replace(/\s{2,}/g, ' ')
+}
+
+function sanitizeTelefonoInput(value: string) {
+  return value.replace(/\D/g, '').slice(0, 10)
+}
+
+function isCorreoValido(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
+}
+
 export default function CarritoPage() {
   const { catalog } = useCatalog()
   const { user } = useAuth()
   const { items, totalAmount, totalItems, removeItem, setItemQuantity, clearCart } = useCart()
 
+  const [tipoEntrega, setTipoEntrega] = useState<'recoger_en_tienda' | 'envio_a_domicilio'>('recoger_en_tienda')
+  const [direccionEnvio, setDireccionEnvio] = useState('')
+  const [nombreInvitado, setNombreInvitado] = useState('')
+  const [telefonoInvitado, setTelefonoInvitado] = useState('')
+  const [correoInvitado, setCorreoInvitado] = useState('')
+  const [direccionesUsuario, setDireccionesUsuario] = useState<Array<{ id: string; etiqueta: string; calle_numero: string; ciudad: string; estado: string; codigo_postal: string; es_predeterminada: boolean }>>([])
+  const [direccionesCargando, setDireccionesCargando] = useState(false)
+  const [direccionSeleccionadaId, setDireccionSeleccionadaId] = useState<string>('manual')
+
   const locale = catalog?.store.locale ?? 'es-MX'
   const currency = catalog?.store.currency ?? 'MXN'
+  const usaDireccionGuardada = user && tipoEntrega === 'envio_a_domicilio' && direccionSeleccionadaId !== 'manual'
+
+  useEffect(() => {
+    if (!user) return
+    const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+    const fullName =
+      (typeof metadata.full_name === 'string' && metadata.full_name.trim()) ||
+      (typeof metadata.name === 'string' && metadata.name.trim()) ||
+      ''
+    if (!nombreInvitado.trim() && fullName) {
+      setNombreInvitado(sanitizeNombreInput(fullName))
+    }
+    if (!correoInvitado.trim() && user.email) {
+      setCorreoInvitado(user.email)
+    }
+  }, [correoInvitado, nombreInvitado, user])
+
+  useEffect(() => {
+    if (!user) {
+      setDireccionesUsuario([])
+      setDireccionSeleccionadaId('manual')
+      return
+    }
+
+    const loadDirecciones = async () => {
+      setDireccionesCargando(true)
+      const { data } = await supabase
+        .from('direcciones_clientes')
+        .select('id,etiqueta,calle_numero,ciudad,estado,codigo_postal,es_predeterminada')
+        .eq('usuario_id', user.id)
+        .order('es_predeterminada', { ascending: false })
+        .order('creado_en', { ascending: false })
+
+      const rows = (data ?? []) as Array<{
+        id: string
+        etiqueta: string
+        calle_numero: string
+        ciudad: string
+        estado: string
+        codigo_postal: string
+        es_predeterminada: boolean
+      }>
+
+      setDireccionesUsuario(rows)
+      if (rows.length > 0) {
+        setDireccionSeleccionadaId(rows[0].id)
+      } else {
+        setDireccionSeleccionadaId('manual')
+      }
+      setDireccionesCargando(false)
+    }
+
+    void loadDirecciones()
+  }, [user])
+
+  const direccionGuardadaTexto = useMemo(() => {
+    if (!user || direccionSeleccionadaId === 'manual') return null
+    const selected = direccionesUsuario.find((item) => item.id === direccionSeleccionadaId)
+    if (!selected) return null
+    return `${selected.calle_numero}, ${selected.ciudad}, ${selected.estado}, ${selected.codigo_postal}`
+  }, [direccionSeleccionadaId, direccionesUsuario, user])
+
+  function validarCamposObligatorios() {
+    if (!nombreInvitado.trim()) return 'Ingresa el nombre completo.'
+    if (sanitizeNombreInput(nombreInvitado).trim().length < 2) return 'El nombre solo debe contener letras.'
+    if (!telefonoInvitado.trim()) return 'Ingresa el telefono.'
+    if (telefonoInvitado.trim().length !== 10) return 'El telefono debe tener exactamente 10 digitos.'
+    if (!correoInvitado.trim()) return 'Ingresa el correo.'
+    if (!isCorreoValido(correoInvitado.trim())) return 'Ingresa un correo valido.'
+    if (tipoEntrega === 'envio_a_domicilio' && !usaDireccionGuardada && direccionEnvio.trim().length === 0) {
+      return 'Si eliges A domicilio debes ingresar una direccion de entrega.'
+    }
+    return null
+  }
 
   const whatsappText = encodeURIComponent(
     [
@@ -29,53 +125,105 @@ export default function CarritoPage() {
             item.dedication ? ` (Dedicatoria: ${item.dedication})` : ''
           }`,
       ),
+      `Tipo de entrega: ${tipoEntrega === 'envio_a_domicilio' ? 'A domicilio' : 'Recoger en tienda'}`,
+      ...(tipoEntrega === 'envio_a_domicilio' && usaDireccionGuardada && direccionGuardadaTexto ? [`Direccion: ${direccionGuardadaTexto}`] : []),
+      ...(tipoEntrega === 'envio_a_domicilio' && !usaDireccionGuardada && direccionEnvio.trim().length > 0
+        ? [`Direccion: ${direccionEnvio.trim()}`]
+        : []),
+      ...(nombreInvitado.trim().length > 0 ? [`Nombre: ${nombreInvitado.trim()}`] : []),
+      ...(telefonoInvitado.trim().length > 0 ? [`Telefono: ${telefonoInvitado.trim()}`] : []),
+      ...(correoInvitado.trim().length > 0 ? [`Correo: ${correoInvitado.trim()}`] : []),
       `Total: ${formatPrice(totalAmount, locale, currency)}`,
     ].join('\n'),
   )
 
   const whatsappUrl = `https://wa.me/525512345678?text=${whatsappText}`
 
+  function handleFinalizeWhatsApp() {
+    if (items.length === 0) return
+    const error = validarCamposObligatorios()
+    if (error) {
+      alert(error)
+      return
+    }
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+  }
+
   async function handleCreateOrder() {
-    if (!user) {
-      alert('Inicia sesion desde el icono de usuario (Magic Link por email) para crear tu pedido.')
+    if (items.length === 0) return
+    const errorCampos = validarCamposObligatorios()
+    if (errorCampos) {
+      alert(errorCampos)
       return
     }
 
-    if (items.length === 0) return
+    const orderId = crypto.randomUUID()
 
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        user_id: user.id,
-        status: 'pending',
-        total_amount: totalAmount,
-      })
-      .select('id')
-      .single()
+    const payloadPedido: {
+      id: string
+      usuario_id?: string
+      nombre_invitado?: string
+      telefono_invitado?: string
+      correo_invitado?: string
+      estado: string
+      tipo_entrega: 'recoger_en_tienda' | 'envio_a_domicilio'
+      direccion_cliente_id: string | null
+      direccion_envio_texto: string | null
+      subtotal: number
+      costo_envio: number
+      total: number
+    } = {
+      id: orderId,
+      estado: 'pendiente',
+      tipo_entrega: tipoEntrega,
+      direccion_cliente_id: usaDireccionGuardada ? direccionSeleccionadaId : null,
+      direccion_envio_texto: tipoEntrega === 'envio_a_domicilio' && !usaDireccionGuardada ? direccionEnvio.trim() : null,
+      subtotal: totalAmount,
+      costo_envio: 0,
+      total: totalAmount,
+    }
 
-    if (orderError || !order) {
-      alert('No se pudo crear el pedido en Supabase.')
+    if (user) {
+      payloadPedido.usuario_id = user.id
+    }
+    payloadPedido.nombre_invitado = nombreInvitado.trim()
+    payloadPedido.telefono_invitado = telefonoInvitado.trim()
+    payloadPedido.correo_invitado = correoInvitado.trim()
+
+    const { error: orderError } = await supabase
+      .from('pedidos')
+      .insert(payloadPedido)
+
+    if (orderError) {
+      const reason = orderError ? `${orderError.code ?? ''} ${orderError.message}`.trim() : 'Sin detalle de error.'
+      alert(`No se pudo crear el pedido en Supabase.\n${reason}`)
       return
     }
 
     const rows = items.map((item) => ({
-      order_id: order.id,
-      product_id: item.productId,
-      product_name: item.name,
-      unit_price: item.unitPrice,
-      quantity: item.quantity,
-      dedication: item.dedication ?? null,
+      pedido_id: orderId,
+      producto_id: item.productId,
+      nombre_producto: item.name,
+      precio_unitario: item.unitPrice,
+      cantidad: item.quantity,
+      dedicatoria: item.dedication ?? null,
     }))
 
-    const { error: itemsError } = await supabase.from('order_items').insert(rows)
+    const { error: itemsError } = await supabase.from('detalle_pedidos').insert(rows)
 
     if (itemsError) {
-      alert('El pedido se creo, pero fallo al guardar los items.')
+      const reason = `${itemsError.code ?? ''} ${itemsError.message}`.trim()
+      alert(`El pedido se creo, pero fallo al guardar los items.\n${reason}`)
       return
     }
 
+    setTipoEntrega('recoger_en_tienda')
+    setDireccionEnvio('')
+    setNombreInvitado('')
+    setTelefonoInvitado('')
+    setCorreoInvitado('')
     clearCart()
-    alert(`Pedido creado con exito. ID: ${order.id}`)
+    alert(`Pedido creado con exito. ID: ${orderId}`)
   }
 
   return (
@@ -141,6 +289,92 @@ export default function CarritoPage() {
           <aside className="h-fit rounded-3xl border border-rose-100 bg-white p-5 shadow-sm lg:sticky lg:top-24">
             <h2 className="text-lg font-bold text-slate-900">Resumen</h2>
             <div className="mt-4 space-y-2 text-sm text-slate-600">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Tipo de entrega</label>
+                <select
+                  value={tipoEntrega}
+                  onChange={(event) => {
+                    const next = event.target.value as 'recoger_en_tienda' | 'envio_a_domicilio'
+                    setTipoEntrega(next)
+                    if (next !== 'envio_a_domicilio') {
+                      setDireccionEnvio('')
+                    }
+                  }}
+                  className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                >
+                  <option value="envio_a_domicilio">A domicilio</option>
+                  <option value="recoger_en_tienda">Recoger en tienda</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Nombre</label>
+                <input
+                  value={nombreInvitado}
+                  onChange={(event) => setNombreInvitado(sanitizeNombreInput(event.target.value))}
+                  placeholder="Tu nombre completo"
+                  autoComplete="name"
+                  inputMode="text"
+                  pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+"
+                  className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Telefono</label>
+                <input
+                  value={telefonoInvitado}
+                  onChange={(event) => setTelefonoInvitado(sanitizeTelefonoInput(event.target.value))}
+                  placeholder="10 digitos"
+                  inputMode="numeric"
+                  maxLength={10}
+                  pattern="\d{10}"
+                  className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Correo</label>
+                <input
+                  value={correoInvitado}
+                  onChange={(event) => setCorreoInvitado(event.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="tu@email.com"
+                  className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                />
+              </div>
+              {tipoEntrega === 'envio_a_domicilio' && (
+                <>
+                  {user && (
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Direccion guardada</label>
+                      <select
+                        value={direccionSeleccionadaId}
+                        onChange={(event) => setDireccionSeleccionadaId(event.target.value)}
+                        disabled={direccionesCargando}
+                        className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                      >
+                        {direccionesUsuario.map((dir) => (
+                          <option key={dir.id} value={dir.id}>
+                            {dir.etiqueta} - {dir.calle_numero}
+                          </option>
+                        ))}
+                        <option value="manual">Escribir otra direccion</option>
+                      </select>
+                    </div>
+                  )}
+                  {(!user || direccionSeleccionadaId === 'manual' || direccionesUsuario.length === 0) && (
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Direccion de entrega</label>
+                      <textarea
+                        value={direccionEnvio}
+                        onChange={(event) => setDireccionEnvio(event.target.value)}
+                        rows={3}
+                        placeholder="Calle, numero, colonia, ciudad, estado y codigo postal"
+                        className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none ring-rose-300 focus:ring"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
               <p className="flex items-center justify-between">
                 <span>Productos</span>
                 <span>{totalItems}</span>
@@ -155,17 +389,15 @@ export default function CarritoPage() {
               onClick={handleCreateOrder}
               className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
             >
-              {user ? 'Crear pedido en Supabase' : 'Entrar con Google para pedir'}
+              {user ? 'Crear pedido en Supabase' : 'Crear pedido como invitado'}
             </button>
 
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={handleFinalizeWhatsApp}
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
             >
               Finalizar por WhatsApp
-            </a>
+            </button>
 
             <button
               onClick={clearCart}
@@ -179,3 +411,4 @@ export default function CarritoPage() {
     </main>
   )
 }
+

@@ -3,48 +3,48 @@ import { supabase } from '../lib/supabaseClient'
 
 type CategoryRow = {
   id: string
-  name: string
+  nombre: string
   slug: string
   emoji: string | null
-  sort_order: number | null
+  orden: number | null
 }
 
 type SubcategoryRow = {
   id: string
-  category_id: string
-  name: string
+  categoria_id: string
+  nombre: string
   slug: string
-  sort_order: number | null
+  orden: number | null
 }
 
 type ProductRow = {
   id: string
   sku: string
-  name: string
-  category_id: string
-  subcategory_id: string
-  description: string
-  price: number
-  images: string[] | null
-  portions: string
-  tags: string[] | null
-  dietary: string[] | null
-  featured: boolean
-  in_stock: boolean
-  prep_hours: number
+  nombre: string
+  categoria_id: string
+  subcategoria_id: string
+  descripcion: string
+  precio: number
+  imagenes: string[] | null
+  porciones: string
+  etiquetas: string[] | null
+  dietas: string[] | null
+  destacado: boolean
+  disponible: boolean
+  horas_preparacion: number
 }
 
 export async function loadCatalogFromSupabase(): Promise<CatalogData> {
   const [{ data: categoriesData, error: categoriesError }, { data: subcategoriesData, error: subcategoriesError }, { data: productsData, error: productsError }] =
     await Promise.all([
-      supabase.from('categories').select('id,name,slug,emoji,sort_order').order('sort_order', { ascending: true }).order('name', { ascending: true }),
-      supabase.from('subcategories').select('id,category_id,name,slug,sort_order').order('sort_order', { ascending: true }).order('name', { ascending: true }),
+      supabase.from('categorias').select('id,nombre,slug,emoji,orden').order('orden', { ascending: true }).order('nombre', { ascending: true }),
+      supabase.from('subcategorias').select('id,categoria_id,nombre,slug,orden').order('orden', { ascending: true }).order('nombre', { ascending: true }),
       supabase
-        .from('products')
-        .select('id,sku,name,category_id,subcategory_id,description,price,images,portions,tags,dietary,featured,in_stock,prep_hours')
-        .eq('active', true)
-        .order('featured', { ascending: false })
-        .order('name', { ascending: true }),
+        .from('productos')
+        .select('id,sku,nombre,categoria_id,subcategoria_id,descripcion,precio,imagenes,porciones,etiquetas,dietas,destacado,disponible,horas_preparacion')
+        .eq('activo', true)
+        .order('destacado', { ascending: false })
+        .order('nombre', { ascending: true }),
     ])
 
   if (categoriesError) throw categoriesError
@@ -57,38 +57,39 @@ export async function loadCatalogFromSupabase(): Promise<CatalogData> {
 
   const subByCategory = new Map<string, SubcategoryRow[]>()
   for (const subcategory of subcategoriesRows) {
-    const list = subByCategory.get(subcategory.category_id) ?? []
+    const list = subByCategory.get(subcategory.categoria_id) ?? []
     list.push(subcategory)
-    subByCategory.set(subcategory.category_id, list)
+    subByCategory.set(subcategory.categoria_id, list)
   }
 
   const categories: Category[] = categoriesRows.map((category) => ({
     id: category.id,
-    name: category.name,
+    name: category.nombre,
     slug: category.slug,
-    emoji: category.emoji ?? '🍰',
+    emoji: category.emoji ?? '',
     subcategories: (subByCategory.get(category.id) ?? []).map((subcategory) => ({
       id: subcategory.id,
-      name: subcategory.name,
+      name: subcategory.nombre,
       slug: subcategory.slug,
+      emoji: category.emoji ?? '',
     })),
   }))
 
   const products: Product[] = productsRows.map((product) => ({
     id: product.id,
     sku: product.sku,
-    name: product.name,
-    categoryId: product.category_id,
-    subcategoryId: product.subcategory_id,
-    description: product.description,
-    price: product.price,
-    images: product.images ?? [],
-    portions: product.portions,
-    tags: product.tags ?? [],
-    dietary: product.dietary ?? [],
-    featured: product.featured,
-    inStock: product.in_stock,
-    prepHours: product.prep_hours,
+    name: product.nombre,
+    categoryId: product.categoria_id,
+    subcategoryId: product.subcategoria_id,
+    description: product.descripcion,
+    price: product.precio,
+    images: product.imagenes ?? [],
+    portions: product.porciones,
+    tags: product.etiquetas ?? [],
+    dietary: product.dietas ?? [],
+    featured: product.destacado,
+    inStock: product.disponible,
+    prepHours: product.horas_preparacion,
   }))
 
   return {

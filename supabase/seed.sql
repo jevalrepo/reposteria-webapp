@@ -1,17 +1,17 @@
-﻿-- Seed catalog data for DulceNube
--- Run after schema.sql
+-- Seed catalog data for DulceNube
+-- Run after esquema_completo_es.sql
 
-insert into public.categories (id, name, slug, emoji, sort_order) values
-  ('cat-pasteles', 'Pasteles', 'pasteles', '🎂', 0),
+insert into public.categorias (id, nombre, slug, emoji, orden) values
+  ('cat-pasteles', 'Pasteles', 'pasteles', '🍰', 0),
   ('cat-cupcakes-mini', 'Cupcakes y mini pasteles', 'cupcakes-y-mini-pasteles', '🧁', 1),
   ('cat-galletas', 'Galletas', 'galletas', '🍪', 2),
   ('cat-postres-individuales', 'Postres individuales', 'postres-individuales', '🍮', 3),
   ('cat-especiales-eventos', 'Especiales para eventos', 'especiales-para-eventos', '🎉', 4),
   ('cat-regalos-cajas', 'Regalos y cajas especiales', 'regalos-y-cajas-especiales', '🎁', 5),
   ('cat-temporada', 'Temporada', 'temporada', '🎄', 6)
-on conflict (id) do update set name = excluded.name, slug = excluded.slug, emoji = excluded.emoji, sort_order = excluded.sort_order;
+on conflict (id) do update set nombre = excluded.nombre, slug = excluded.slug, emoji = excluded.emoji, orden = excluded.orden;
 
-insert into public.subcategories (id, category_id, name, slug, sort_order) values
+insert into public.subcategorias (id, categoria_id, nombre, slug, orden) values
   ('sub-pasteles-clasicos', 'cat-pasteles', 'Pasteles clasicos', 'pasteles-clasicos', 0),
   ('sub-pasteles-gourmet', 'cat-pasteles', 'Pasteles gourmet', 'pasteles-gourmet', 1),
   ('sub-pasteles-personalizados', 'cat-pasteles', 'Pasteles personalizados', 'pasteles-personalizados', 2),
@@ -46,9 +46,9 @@ insert into public.subcategories (id, category_id, name, slug, sort_order) value
   ('sub-navidad', 'cat-temporada', 'Navidad', 'navidad', 31),
   ('sub-halloween', 'cat-temporada', 'Halloween', 'halloween', 32),
   ('sub-dia-nino', 'cat-temporada', 'Dia del Nino', 'dia-del-nino', 33)
-on conflict (id) do update set category_id = excluded.category_id, name = excluded.name, slug = excluded.slug, sort_order = excluded.sort_order;
+on conflict (id) do update set categoria_id = excluded.categoria_id, nombre = excluded.nombre, slug = excluded.slug, orden = excluded.orden;
 
-insert into public.products (id, sku, category_id, subcategory_id, name, description, price, images, portions, tags, dietary, featured, in_stock, prep_hours, active) values
+insert into public.productos (id, sku, categoria_id, subcategoria_id, nombre, descripcion, precio, imagenes, porciones, etiquetas, dietas, destacado, disponible, horas_preparacion, activo) values
   ('prd-001', 'PA-CLA-001', 'cat-pasteles', 'sub-pasteles-clasicos', 'Pastel Tres Leches Tradicional', 'Bizcocho vainilla, remojo tres leches y crema batida ligera.', 520, '{"https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=1200&auto=format&fit=crop"}'::text[], '10-12', '{"clasico","cumpleanos"}'::text[], '{}'::text[], true, true, 24, true),
   ('prd-002', 'PA-GOU-001', 'cat-pasteles', 'sub-pasteles-gourmet', 'Pastel Opera de Cafe', 'Capas de almendra, ganache oscuro y crema de cafe.', 780, '{"https://images.unsplash.com/photo-1621303837174-89787a7d4729?q=80&w=1200&auto=format&fit=crop"}'::text[], '12-14', '{"gourmet","chocolate"}'::text[], '{}'::text[], true, true, 48, true),
   ('prd-003', 'PA-PER-001', 'cat-pasteles', 'sub-pasteles-personalizados', 'Pastel Personalizado Tema Anime', 'Cobertura fondant con diseno y nombre personalizado.', 950, '{"https://images.unsplash.com/photo-1535254973040-607b474cb50d?q=80&w=1200&auto=format&fit=crop"}'::text[], '15-18', '{"personalizado","fondant"}'::text[], '{}'::text[], false, true, 72, true),
@@ -83,4 +83,6 @@ insert into public.products (id, sku, category_id, subcategory_id, name, descrip
   ('prd-032', 'TE-NAV-001', 'cat-temporada', 'sub-navidad', 'Tronco Navideno Chocolate', 'Tronco clasico con ganache y decoracion navidena.', 780, '{"https://images.unsplash.com/photo-1541599540903-216a46ca1dc0?q=80&w=1200&auto=format&fit=crop"}'::text[], '10 personas', '{"navidad","temporada"}'::text[], '{}'::text[], true, true, 48, true),
   ('prd-033', 'TE-HAL-001', 'cat-temporada', 'sub-halloween', 'Cupcakes Halloween Monster', 'Caja tematica de 12 cupcakes con decoracion de halloween.', 360, '{"https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1200&auto=format&fit=crop"}'::text[], '12 piezas', '{"halloween","decorados"}'::text[], '{}'::text[], false, true, 24, true),
   ('prd-034', 'TE-NIN-001', 'cat-temporada', 'sub-dia-nino', 'Caja Dia del Nino Fiesta', 'Mix divertido de mini postres con toppings coloridos.', 430, '{"https://images.unsplash.com/photo-1464306076886-da185f6a9d05?q=80&w=1200&auto=format&fit=crop"}'::text[], '1 caja', '{"dia-del-nino","fiesta"}'::text[], '{}'::text[], false, true, 24, true)
-on conflict (id) do update set sku = excluded.sku, category_id = excluded.category_id, subcategory_id = excluded.subcategory_id, name = excluded.name, description = excluded.description, price = excluded.price, images = excluded.images, portions = excluded.portions, tags = excluded.tags, dietary = excluded.dietary, featured = excluded.featured, in_stock = excluded.in_stock, prep_hours = excluded.prep_hours, active = excluded.active;
+on conflict (id) do update set sku = excluded.sku, categoria_id = excluded.categoria_id, subcategoria_id = excluded.subcategoria_id, nombre = excluded.nombre, descripcion = excluded.descripcion, precio = excluded.precio, imagenes = excluded.imagenes, porciones = excluded.porciones, etiquetas = excluded.etiquetas, dietas = excluded.dietas, destacado = excluded.destacado, disponible = excluded.disponible, horas_preparacion = excluded.horas_preparacion, activo = excluded.activo;
+
+
