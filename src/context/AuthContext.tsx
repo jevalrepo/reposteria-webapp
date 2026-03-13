@@ -10,6 +10,11 @@ function readString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function getAuthAvatar(user: User) {
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+  return readString(metadata.avatar_url) ?? readString(metadata.picture)
+}
+
 function getAuthFullName(user: User) {
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
   const fullName = readString(metadata.full_name) ?? readString(metadata.name)
@@ -19,11 +24,6 @@ function getAuthFullName(user: User) {
   const familyName = readString(metadata.family_name)
   const composedName = [givenName, familyName].filter(Boolean).join(' ').trim()
   return composedName.length > 0 ? composedName : null
-}
-
-function getAuthAvatar(user: User) {
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
-  return readString(metadata.avatar_url) ?? readString(metadata.picture)
 }
 
 function getOAuthCodeFromUrl() {
@@ -114,21 +114,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  async function fetchProfile(currentUser: User) {
+    const { error: ensureProfileError } = await supabase.rpc('ensure_my_profile')
+    if (ensureProfileError && ensureProfileError.code !== '42883') {
+      // eslint-disable-next-line no-console
+      console.warn('No se pudo asegurar perfil via RPC.', ensureProfileError)
+    }
+
+    const profileSeed: { correo_electronico?: string; url_avatar?: string; nombre_completo?: string } = {}
+
+    if (currentUser.email) profileSeed.correo_electronico = currentUser.email
+    const authAvatar = getAuthAvatar(currentUser)
+    if (authAvatar) profileSeed.url_avatar = authAvatar
+    const authFullName = getAuthFullName(currentUser)
+    if (authFullName) profileSeed.nombre_completo = authFullName
+
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('perfiles')
+      .update(profileSeed)
+      .eq('id', currentUser.id)
+      .select('id')
+      .limit(1)
+
+    if (updateError) {
+      // eslint-disable-next-line no-console
+      console.warn('No se pudo actualizar seed de perfil.', updateError)
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      const { error: insertError } = await supabase
+        .from('perfiles')
+        .insert({ id: currentUser.id, ...profileSeed })
+
+      if (insertError && insertError.code !== '23505') {
+        // eslint-disable-next-line no-console
+        console.warn('No se pudo crear perfil al iniciar sesion.', insertError)
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .select('id,rol,nombre_completo,telefono,url_avatar')
+      .eq('id', currentUser.id)
+      .maybeSingle()
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn('No se pudo leer perfil despues de login.', error)
+      return null
+    }
+    if (!data) return null
+    return data as UserProfile
+  }
+
+  async function refreshProfile() {
+    if (!user) {
+      setProfile(null)
+      setProfileLoaded(true)
+      return
+    }
+
+    setProfileLoaded(false)
+    const nextProfile = await fetchProfile(user)
+    setProfile(nextProfile)
+    setProfileLoaded(true)
+  }
 
   useEffect(() => {
     let mounted = true
 
-    async function bootstrap() {
+        async function bootstrap() {
+      let shouldCleanOAuthParams = false
       const oauthCode = getOAuthCodeFromUrl()
       if (oauthCode && !wasCodeAlreadyProcessed(oauthCode)) {
         try {
-          await supabase.auth.exchangeCodeForSession(oauthCode)
-          markCodeAsProcessed(oauthCode)
+          const { error } = await supabase.auth.exchangeCodeForSession(oauthCode)
+          if (!error) {
+            markCodeAsProcessed(oauthCode)
+            shouldCleanOAuthParams = true
+          }
         } catch {
-          // Continue bootstrap; session may already be present from a prior callback run.
-        } finally {
-          cleanOAuthParamsFromUrl()
+          // Network error. Keep OAuth params so this flow can retry.
         }
       }
 
@@ -139,11 +208,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             access_token: oauthTokens.accessToken,
             refresh_token: oauthTokens.refreshToken,
           })
+          shouldCleanOAuthParams = true
         } catch {
-          // Ignore token parsing errors and continue with persisted session retrieval.
-        } finally {
-          cleanOAuthParamsFromUrl()
+          // Keep OAuth params so this flow can retry.
         }
+      }
+
+      if (shouldCleanOAuthParams || (oauthCode && wasCodeAlreadyProcessed(oauthCode))) {
+        cleanOAuthParamsFromUrl()
       }
 
       const { data } = await supabase.auth.getSession()
@@ -174,38 +246,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function loadProfile() {
       if (!user) {
         setProfile(null)
+        setProfileLoaded(true)
         return
       }
 
-      const profileSeed: { id: string; correo_electronico?: string; nombre_completo?: string; url_avatar?: string } = {
-        id: user.id,
-      }
-
-      if (user.email) profileSeed.correo_electronico = user.email
-      const authFullName = getAuthFullName(user)
-      if (authFullName) profileSeed.nombre_completo = authFullName
-      const authAvatar = getAuthAvatar(user)
-      if (authAvatar) profileSeed.url_avatar = authAvatar
-
-      await supabase.from('perfiles').upsert(profileSeed, { onConflict: 'id' })
-
-      const { data, error } = await supabase
-        .from('perfiles')
-        .select('id,rol,nombre_completo,url_avatar')
-        .eq('id', user.id)
-        .single()
-
+      setProfileLoaded(false)
+      const nextProfile = await fetchProfile(user)
       if (!mounted) return
-      if (error) {
-        setProfile(null)
-        return
-      }
-
-      setProfile(data as UserProfile)
+      setProfile(nextProfile)
+      setProfileLoaded(true)
     }
 
     loadProfile().catch(() => {
-      if (mounted) setProfile(null)
+      if (mounted) {
+        setProfile(null)
+        setProfileLoaded(true)
+      }
     })
 
     return () => {
@@ -225,6 +281,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null }
   }
 
+  async function signInWithGitHub() {
+    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo,
+        scopes: 'read:user user:email',
+      },
+    })
+
+    return { error: error?.message ?? null }
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
@@ -235,8 +304,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user,
         profile,
+        profileLoaded,
         loading,
+        refreshProfile,
         signInWithGoogle,
+        signInWithGitHub,
         signOut,
       }}
     >
@@ -244,3 +316,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   )
 }
+

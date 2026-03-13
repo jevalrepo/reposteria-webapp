@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { supabase } from '../../lib/supabaseClient'
+import { sanitizeTelefonoInput } from '../../utils/phone'
+import { useToast } from '../../components/Toast/ToastProvider'
 
 type OrderItem = {
   id: string
@@ -123,26 +125,17 @@ function readString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function getNombreDesdeAuth(user: { user_metadata?: Record<string, unknown> }) {
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
-  const fullName = readString(metadata.full_name) ?? readString(metadata.name)
-  if (fullName) return fullName
-
-  const givenName = readString(metadata.given_name)
-  const familyName = readString(metadata.family_name)
-  const composedName = [givenName, familyName].filter(Boolean).join(' ').trim()
-  return composedName.length > 0 ? composedName : null
-}
-
 function getAvatarDesdeAuth(user: { user_metadata?: Record<string, unknown> }) {
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
   return readString(metadata.avatar_url) ?? readString(metadata.picture)
 }
 
 export default function MiCuentaPage() {
-  const { user, profile } = useAuth()
+  const { user, profile, profileLoaded } = useAuth()
+  const { addToast } = useToast()
   const [activeTab, setActiveTab] = useState<'perfil' | 'direcciones' | 'pedidos'>('perfil')
   const [profileName, setProfileName] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileStatus, setProfileStatus] = useState('')
 
@@ -160,20 +153,29 @@ export default function MiCuentaPage() {
   const [savingAddress, setSavingAddress] = useState(false)
   const [addressStatus, setAddressStatus] = useState('')
 
-  const nombreDesdeAuth = useMemo(() => (user ? getNombreDesdeAuth(user) : null), [user])
   const avatarDesdeAuth = useMemo(() => (user ? getAvatarDesdeAuth(user) : null), [user])
   const avatarPerfil = profile?.url_avatar ?? avatarDesdeAuth
 
   const userDisplayName = useMemo(
-    () => profileName.trim() || profile?.nombre_completo || nombreDesdeAuth || user?.email || 'Usuario',
-    [nombreDesdeAuth, profile?.nombre_completo, profileName, user?.email],
+    () => {
+      if (!profileLoaded) return ''
+      return profileName.trim() || profile?.nombre_completo || user?.email || 'Usuario'
+    },
+    [profile?.nombre_completo, profileLoaded, profileName, user?.email],
   )
+  const avatarInitials = useMemo(() => {
+    const base = userDisplayName.trim()
+    if (base.length === 0) return '--'
+    return base.slice(0, 2).toUpperCase()
+  }, [userDisplayName])
 
   useEffect(() => {
     if (!user) return
+    if (!profileLoaded) return
 
-    setProfileName(profile?.nombre_completo ?? nombreDesdeAuth ?? '')
-  }, [nombreDesdeAuth, profile?.nombre_completo, user])
+    setProfileName(profile?.nombre_completo ?? '')
+    setProfilePhone(profile?.telefono ?? '')
+  }, [profile?.nombre_completo, profile?.telefono, profileLoaded, user])
 
   useEffect(() => {
     if (!user) return
@@ -245,18 +247,52 @@ export default function MiCuentaPage() {
     setProfileStatus('')
 
     const fullName = profileName.trim()
-    const { error } = await supabase.from('perfiles').upsert(
-      {
-        id: user.id,
-        correo_electronico: user.email ?? null,
-        nombre_completo: fullName.length > 0 ? fullName : null,
-      },
-      { onConflict: 'id' },
-    )
+    const phoneRaw = profilePhone.trim()
+    const phoneValue = sanitizeTelefonoInput(phoneRaw)
+
+    if (phoneRaw.length > 0 && phoneValue.length !== 10) {
+      setSavingProfile(false)
+      setProfileStatus('El telefono debe tener 10 digitos numericos.')
+      return
+    }
+
+    const payloadPerfil = {
+      correo_electronico: user.email ?? null,
+      nombre_completo: fullName.length > 0 ? fullName : null,
+      telefono: phoneRaw.length > 0 ? phoneValue : null,
+    }
+
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('perfiles')
+      .update(payloadPerfil)
+      .eq('id', user.id)
+      .select('id')
+      .limit(1)
+
+    let error = updateError
+    if (!error && (!updatedRows || updatedRows.length === 0)) {
+      const { error: insertError } = await supabase
+        .from('perfiles')
+        .insert({ id: user.id, ...payloadPerfil })
+      error = insertError
+    }
 
     setSavingProfile(false)
     if (error) {
-      setProfileStatus('No se pudo guardar el perfil.')
+      if (error.code === '42703') {
+        setProfileStatus('No existe la columna telefono en perfiles. Ejecuta el script SQL de migracion.')
+        return
+      }
+      if (error.code === '23514') {
+        setProfileStatus('Telefono invalido. Debe ser null o 10 digitos numericos.')
+        return
+      }
+      if (error.code === '42501') {
+        setProfileStatus('Sin permisos para actualizar el perfil (RLS/politicas).')
+        return
+      }
+      const reason = `${error.code ?? ''} ${error.message}`.trim()
+      setProfileStatus(`No se pudo guardar el perfil. ${reason}`)
       return
     }
 
@@ -389,10 +425,10 @@ export default function MiCuentaPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-12 md:px-6">
-        <div className="rounded-2xl border border-rose-100 bg-white p-8 text-center shadow-sm">
+        <div className="rounded-2xl border border-teal-100 bg-white p-8 text-center shadow-sm">
           <h1 className="text-2xl font-black text-slate-900">Mi cuenta</h1>
           <p className="mt-3 text-sm text-slate-600">Necesitas iniciar sesion para ver esta seccion.</p>
-          <Link to="/" className="mt-5 inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white">
+          <Link to="/" className="mt-5 inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white">
             Volver al inicio
           </Link>
         </div>
@@ -402,35 +438,41 @@ export default function MiCuentaPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-12">
-      <div className="mb-6 rounded-3xl border border-rose-100 bg-white p-6 shadow-sm md:p-8">
+      <div className="mb-6 rounded-3xl border border-teal-100 bg-white p-6 shadow-sm md:p-8">
         <h1 className="text-3xl font-black tracking-tight text-slate-900">Mi cuenta</h1>
-        <p className="mt-2 text-sm text-slate-600">{userDisplayName}</p>
+        <p className="mt-2 min-h-[20px] text-sm text-slate-600">{profileLoaded ? userDisplayName : ''}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className="h-fit rounded-2xl border border-rose-100 bg-white p-3 shadow-sm">
+        <aside className="h-fit rounded-2xl border border-teal-100 bg-white p-3 shadow-sm">
           <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Apartados</p>
-          <nav className="space-y-1">
+          <nav role="tablist" aria-label="Secciones de mi cuenta" className="space-y-1">
             <button
+              role="tab"
+              aria-selected={activeTab === 'perfil'}
               onClick={() => setActiveTab('perfil')}
               className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                activeTab === 'perfil' ? 'bg-rose-700 text-white' : 'text-slate-700 hover:bg-rose-50'
+                activeTab === 'perfil' ? 'bg-teal-700 text-white' : 'text-slate-700 hover:bg-teal-50'
               }`}
             >
               Mi perfil
             </button>
             <button
+              role="tab"
+              aria-selected={activeTab === 'direcciones'}
               onClick={() => setActiveTab('direcciones')}
               className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                activeTab === 'direcciones' ? 'bg-rose-700 text-white' : 'text-slate-700 hover:bg-rose-50'
+                activeTab === 'direcciones' ? 'bg-teal-700 text-white' : 'text-slate-700 hover:bg-teal-50'
               }`}
             >
               Mis direcciones
             </button>
             <button
+              role="tab"
+              aria-selected={activeTab === 'pedidos'}
               onClick={() => setActiveTab('pedidos')}
               className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                activeTab === 'pedidos' ? 'bg-rose-700 text-white' : 'text-slate-700 hover:bg-rose-50'
+                activeTab === 'pedidos' ? 'bg-teal-700 text-white' : 'text-slate-700 hover:bg-teal-50'
               }`}
             >
               Mis pedidos
@@ -440,19 +482,19 @@ export default function MiCuentaPage() {
 
         <section className="space-y-6">
           {activeTab === 'perfil' && (
-            <section className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+            <section className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">Mi perfil</h2>
               <form onSubmit={handleSaveProfile} className="mt-4 space-y-3">
-                <div className="flex items-center gap-3 rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                <div className="flex items-center gap-3 rounded-xl border border-teal-100 bg-teal-50/40 p-3">
                   {avatarPerfil ? (
                     <img src={avatarPerfil} alt="Avatar del usuario" className="h-14 w-14 rounded-full object-cover" />
                   ) : (
-                    <div className="grid h-14 w-14 place-items-center rounded-full bg-rose-200 text-sm font-bold text-rose-700">
-                      {userDisplayName.slice(0, 2).toUpperCase()}
+                    <div className="grid h-14 w-14 place-items-center rounded-full bg-teal-200 text-sm font-bold text-teal-700">
+                      {avatarInitials}
                     </div>
                   )}
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{userDisplayName}</p>
+                    <p className="min-h-[20px] text-sm font-semibold text-slate-900">{profileLoaded ? userDisplayName : ''}</p>
                     <p className="text-xs text-slate-500">Avatar de Google</p>
                   </div>
                 </div>
@@ -461,7 +503,7 @@ export default function MiCuentaPage() {
                   <input
                     value={user.email ?? ''}
                     disabled
-                    className="w-full rounded-xl border border-rose-100 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                    className="w-full rounded-xl border border-teal-100 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                   />
                 </div>
                 <div>
@@ -470,84 +512,96 @@ export default function MiCuentaPage() {
                     value={profileName}
                     onChange={(event) => setProfileName(event.target.value)}
                     placeholder="Tu nombre completo"
-                    className="w-full rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                    className="w-full rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Telefono</label>
+                  <input
+                    value={profilePhone}
+                    onChange={(event) => setProfilePhone(sanitizeTelefonoInput(event.target.value))}
+                    placeholder="10 digitos"
+                    inputMode="numeric"
+                    maxLength={10}
+                    pattern="\d{10}"
+                    className="w-full rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60"
+                  className="inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
                 >
                   {savingProfile ? 'Guardando...' : 'Guardar perfil'}
                 </button>
-                {profileStatus && <p className="text-xs text-slate-600">{profileStatus}</p>}
+                {profileStatus && <p role="status" className="text-xs text-slate-600">{profileStatus}</p>}
               </form>
             </section>
           )}
 
           {activeTab === 'direcciones' && (
-            <section className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+            <section className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">Mis direcciones</h2>
               <form onSubmit={handleSaveAddress} className="mt-4 grid gap-3 sm:grid-cols-2">
                 <input
                   value={addressForm.etiqueta}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, etiqueta: event.target.value }))}
                   placeholder="Etiqueta (Casa, Oficina)"
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.nombre_recibe}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, nombre_recibe: event.target.value }))}
                   placeholder="Nombre de quien recibe"
                   required
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.telefono}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, telefono: event.target.value }))}
                   placeholder="Telefono"
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.codigo_postal}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, codigo_postal: event.target.value }))}
                   placeholder="Codigo postal"
                   required
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.calle_numero}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, calle_numero: event.target.value }))}
                   placeholder="Calle y numero"
                   required
-                  className="sm:col-span-2 rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="sm:col-span-2 rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.interior_referencia}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, interior_referencia: event.target.value }))}
                   placeholder="Interior, referencia (opcional)"
-                  className="sm:col-span-2 rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="sm:col-span-2 rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.ciudad}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, ciudad: event.target.value }))}
                   placeholder="Ciudad"
                   required
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <input
                   value={addressForm.estado}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, estado: event.target.value }))}
                   placeholder="Estado"
                   required
-                  className="rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <textarea
                   value={addressForm.notas_entrega}
                   onChange={(event) => setAddressForm((estado) => ({ ...estado, notas_entrega: event.target.value }))}
                   rows={2}
                   placeholder="Notas de entrega (opcional)"
-                  className="sm:col-span-2 rounded-xl border border-rose-100 px-3 py-2 text-sm outline-none ring-rose-300 focus:ring"
+                  className="sm:col-span-2 rounded-xl border border-teal-100 px-3 py-2 text-sm outline-none ring-teal-300 focus:ring"
                 />
                 <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -561,7 +615,7 @@ export default function MiCuentaPage() {
                   <button
                     type="submit"
                     disabled={savingAddress}
-                    className="inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60"
+                    className="inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
                   >
                     {savingAddress ? 'Guardando...' : editingAddressId ? 'Actualizar direccion' : 'Guardar direccion'}
                   </button>
@@ -569,14 +623,14 @@ export default function MiCuentaPage() {
                     <button
                       type="button"
                       onClick={resetAddressForm}
-                      className="inline-flex rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                      className="inline-flex rounded-xl border border-teal-200 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
                     >
                       Cancelar edicion
                     </button>
                   )}
                 </div>
-                {addressStatus && <p className="sm:col-span-2 text-xs text-slate-600">{addressStatus}</p>}
-                {addressesError && <p className="sm:col-span-2 text-xs text-rose-700">{addressesError}</p>}
+                {addressStatus && <p role="status" className="sm:col-span-2 text-xs text-slate-600">{addressStatus}</p>}
+                {addressesError && <p className="sm:col-span-2 text-xs text-teal-700">{addressesError}</p>}
               </form>
 
               <div className="mt-5 space-y-3">
@@ -586,7 +640,7 @@ export default function MiCuentaPage() {
                   <p className="text-sm text-slate-500">Aun no has guardado direcciones.</p>
                 ) : (
                   addresses.map((address) => (
-                    <article key={address.id} className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                    <article key={address.id} className="rounded-xl border border-teal-100 bg-teal-50/40 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-bold text-slate-900">
                           {address.etiqueta} {address.es_predeterminada ? '(Predeterminada)' : ''}
@@ -594,7 +648,7 @@ export default function MiCuentaPage() {
                         <div className="space-x-2 text-xs">
                           <button
                             onClick={() => startAddressEdit(address)}
-                            className="font-semibold text-rose-700 hover:text-rose-800"
+                            className="font-semibold text-teal-700 hover:text-teal-800"
                           >
                             Editar
                           </button>
@@ -602,7 +656,7 @@ export default function MiCuentaPage() {
                             onClick={() => {
                               void handleDeleteAddress(address.id)
                             }}
-                            className="font-semibold text-rose-700 hover:text-rose-800"
+                            className="font-semibold text-teal-700 hover:text-teal-800"
                           >
                             Eliminar
                           </button>
@@ -626,9 +680,9 @@ export default function MiCuentaPage() {
           )}
 
           {activeTab === 'pedidos' && (
-            <section className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+            <section className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">Mis pedidos</h2>
-              {pedidosError && <p className="mt-3 text-sm text-rose-700">{pedidosError}</p>}
+              {pedidosError && <p className="mt-3 text-sm text-teal-700">{pedidosError}</p>}
               {pedidosLoading ? (
                 <p className="mt-3 text-sm text-slate-500">Cargando pedidos...</p>
               ) : pedidos.length === 0 ? (
@@ -636,7 +690,7 @@ export default function MiCuentaPage() {
               ) : (
                 <div className="mt-4 space-y-3">
                   {pedidos.map((order) => (
-                    <article key={order.id} className="rounded-xl border border-rose-100 bg-rose-50/40 p-4">
+                    <article key={order.id} className="rounded-xl border border-teal-100 bg-teal-50/40 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="text-sm font-bold text-slate-900">Pedido #{order.folio ?? order.id.slice(0, 8)}</p>
@@ -666,7 +720,7 @@ export default function MiCuentaPage() {
                               void handleCancelOrder(order.id)
                             }}
                             disabled={cancelandoPedidoId === order.id}
-                            className="inline-flex rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                            className="inline-flex rounded-xl border border-teal-200 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-60"
                           >
                             {cancelandoPedidoId === order.id ? 'Cancelando...' : 'Cancelar pedido'}
                           </button>
@@ -674,15 +728,15 @@ export default function MiCuentaPage() {
                         <button
                           type="button"
                           onClick={() => setPedidoSeleccionado(order)}
-                          className="inline-flex rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                          className="inline-flex rounded-xl border border-teal-200 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
                         >
                           Ver detalle
                         </button>
                         {order.estado !== 'cancelado' && (
                           <button
                             type="button"
-                            onClick={() => window.alert('Proximamente podras pagar desde aqui.')}
-                            className="inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+                            onClick={() => addToast('Proximamente podras pagar desde aqui.', 'info')}
+                            className="inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
                           >
                             Pagar
                           </button>
@@ -705,12 +759,12 @@ export default function MiCuentaPage() {
               addresses.find((address) => address.id === pedidoSeleccionado.direccion_cliente_id) ??
               null
             return (
-          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-rose-100 bg-white p-5 shadow-xl">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-teal-100 bg-white p-5 shadow-xl">
             <button
               type="button"
               onClick={() => setPedidoSeleccionado(null)}
               aria-label="Cerrar detalle"
-              className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-rose-200 text-sm font-bold text-rose-700 hover:bg-rose-50"
+              className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-teal-200 text-sm font-bold text-teal-700 hover:bg-teal-50"
             >
               X
             </button>
@@ -724,13 +778,13 @@ export default function MiCuentaPage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+              <div className="rounded-xl border border-teal-100 bg-teal-50/40 p-3">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Estado</p>
                 <p className={`text-sm font-semibold ${statusColorClass(pedidoSeleccionado.estado)}`}>
                   {pedidoSeleccionado.estado}
                 </p>
               </div>
-              <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+              <div className="rounded-xl border border-teal-100 bg-teal-50/40 p-3">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Tipo de entrega</p>
                 <p className="text-sm font-semibold text-slate-900">
                   {formatTipoEntrega(pedidoSeleccionado.tipo_entrega)}
@@ -738,7 +792,7 @@ export default function MiCuentaPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-rose-100 p-3">
+            <div className="mt-4 rounded-xl border border-teal-100 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-500">Direccion de entrega</p>
               <p className="mt-1 text-sm text-slate-900">
                 {construirDireccionCompleta(direccionSeleccionada, pedidoSeleccionado.direccion_envio_texto)}
@@ -761,11 +815,11 @@ export default function MiCuentaPage() {
               )}
             </div>
 
-            <div className="mt-4 rounded-xl border border-rose-100 p-3">
+            <div className="mt-4 rounded-xl border border-teal-100 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-500">Productos</p>
               <ul className="mt-2 space-y-2 text-sm text-slate-700">
                 {pedidoSeleccionado.detalle_pedidos?.map((item) => (
-                  <li key={item.id} className="rounded-lg border border-rose-100 bg-rose-50/30 p-2">
+                  <li key={item.id} className="rounded-lg border border-teal-100 bg-teal-50/30 p-2">
                     <div className="flex justify-between gap-2">
                       <span>
                         {item.nombre_producto} x{item.cantidad}
@@ -801,7 +855,7 @@ export default function MiCuentaPage() {
                     void handleCancelOrder(pedidoSeleccionado.id)
                   }}
                   disabled={cancelandoPedidoId === pedidoSeleccionado.id}
-                  className="inline-flex rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                  className="inline-flex rounded-xl border border-teal-200 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-60"
                 >
                   {cancelandoPedidoId === pedidoSeleccionado.id ? 'Cancelando...' : 'Cancelar pedido'}
                 </button>
@@ -809,8 +863,8 @@ export default function MiCuentaPage() {
               {pedidoSeleccionado.estado !== 'cancelado' && (
                 <button
                   type="button"
-                  onClick={() => window.alert('Proximamente podras pagar este pedido.')}
-                  className="inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+                  onClick={() => addToast('Proximamente podras pagar este pedido.', 'info')}
+                  className="inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
                 >
                   Pagar
                 </button>

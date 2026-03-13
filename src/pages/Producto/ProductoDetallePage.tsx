@@ -1,22 +1,22 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useCart } from '../../context/CartContext'
 import { useCatalog } from '../../hooks/useCatalog'
-
-function formatPrice(amount: number, locale: string, currency: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
+import { formatPrice } from '../../utils/format'
+import { useToast } from '../../components/Toast/ToastProvider'
 
 export default function ProductoDetallePage() {
   const { id } = useParams()
   const { catalog, loading } = useCatalog()
-  const { addItem } = useCart()
+  const { addItem, items, removeItem, setItemQuantity } = useCart()
+  const { addToast } = useToast()
 
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState(0)
+  const directCartItem = id ? items.find((item) => item.id === `${id}::`) : undefined
+
+  useEffect(() => {
+    setQuantity(directCartItem?.quantity ?? 0)
+  }, [directCartItem?.quantity])
 
   if (loading) {
     return (
@@ -41,7 +41,7 @@ export default function ProductoDetallePage() {
       <main className="mx-auto max-w-6xl px-4 py-14 md:px-6">
         <h1 className="text-2xl font-black text-slate-900">Producto no encontrado</h1>
         <p className="mt-2 text-sm text-slate-600">El producto que buscas no existe o fue removido.</p>
-        <Link to="/categorias" className="mt-5 inline-flex rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white">
+        <Link to="/categorias" className="mt-5 inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white">
           Volver a categorias
         </Link>
       </main>
@@ -58,29 +58,44 @@ export default function ProductoDetallePage() {
   const unitPrice = product.price
   const totalPrice = unitPrice * quantity
 
-  const handleAddToCart = () => {
-    addItem({
-      productId: product.id,
-      name: product.name,
-      image: product.images[0],
-      unitPrice: product.price,
-      quantity,
-    })
+  const handleQuantityChange = (nextQuantity: number) => {
+    const safeQuantity = Math.max(0, Math.min(50, nextQuantity))
+    setQuantity(safeQuantity)
+
+    if (directCartItem) {
+      if (safeQuantity === 0) {
+        removeItem(directCartItem.id)
+        return
+      }
+      setItemQuantity(directCartItem.id, safeQuantity)
+      return
+    }
+
+    if (safeQuantity > 0) {
+      addItem({
+        productId: product.id,
+        name: product.name,
+        image: product.images[0],
+        unitPrice: product.price,
+        quantity: safeQuantity,
+      })
+      addToast(`¡${product.name} agregado al carrito!`, 'success')
+    }
   }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-14">
-      <Link to="/categorias" className="text-sm font-semibold text-rose-700 hover:text-rose-800">
+      <Link to="/categorias" className="text-sm font-semibold text-teal-700 hover:text-teal-800">
         ← Volver a categorias
       </Link>
 
       <section className="mt-4 grid items-start gap-6 lg:grid-cols-[1.1fr_1fr]">
-        <div className="overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-3xl border border-teal-100 bg-white shadow-sm">
           <img src={product.images[0]} alt={product.name} className="h-[420px] w-full object-cover" />
         </div>
 
-        <article className="rounded-3xl border border-rose-100 bg-white p-6 shadow-sm md:p-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+        <article className="rounded-3xl border border-teal-100 bg-white p-6 shadow-sm md:p-8">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
             {category?.emoji} {category?.name} · {subcategory?.name}
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">{product.name}</h1>
@@ -99,17 +114,17 @@ export default function ProductoDetallePage() {
           <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cantidad</p>
-              <div className="mt-2 inline-flex items-center rounded-xl border border-rose-100 bg-white">
+              <div className="mt-2 inline-flex items-center rounded-xl border border-teal-100 bg-white">
                 <button
-                  onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                  className="px-3 py-2 text-sm font-bold text-slate-700 hover:bg-rose-50"
+                  onClick={() => handleQuantityChange(quantity - 1)}
+                  className="px-3 py-2 text-sm font-bold text-slate-700 hover:bg-teal-50"
                 >
                   -
                 </button>
                 <span className="min-w-10 px-2 text-center text-sm font-semibold text-slate-900">{quantity}</span>
                 <button
-                  onClick={() => setQuantity((current) => Math.min(20, current + 1))}
-                  className="px-3 py-2 text-sm font-bold text-slate-700 hover:bg-rose-50"
+                  onClick={() => handleQuantityChange(quantity + 1)}
+                  className="px-3 py-2 text-sm font-bold text-slate-700 hover:bg-teal-50"
                 >
                   +
                 </button>
@@ -121,12 +136,6 @@ export default function ProductoDetallePage() {
                 {formatPrice(unitPrice, catalog.store.locale, catalog.store.currency)}
               </p>
               <p className="text-xs text-slate-500">Total: {formatPrice(totalPrice, catalog.store.locale, catalog.store.currency)}</p>
-              <button
-                onClick={handleAddToCart}
-                className="mt-3 rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-              >
-                Agregar al carrito
-              </button>
             </div>
           </div>
         </article>
@@ -140,14 +149,14 @@ export default function ProductoDetallePage() {
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {relatedProducts.map((item) => (
-              <article key={item.id} className="overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm">
+              <article key={item.id} className="overflow-hidden rounded-2xl border border-teal-100 bg-white shadow-sm">
                 <img src={item.images[0]} alt={item.name} className="h-36 w-full object-cover" />
                 <div className="p-3">
                   <h3 className="text-sm font-semibold text-slate-900">{item.name}</h3>
-                  <p className="mt-2 text-sm font-bold text-rose-700">
+                  <p className="mt-2 text-sm font-bold text-teal-700">
                     {formatPrice(item.price, catalog.store.locale, catalog.store.currency)}
                   </p>
-                  <Link to={`/producto/${item.id}`} className="mt-3 inline-flex text-xs font-semibold text-rose-700 hover:text-rose-800">
+                  <Link to={`/producto/${item.id}`} className="mt-3 inline-flex text-xs font-semibold text-teal-700 hover:text-teal-800">
                     Ver detalle
                   </Link>
                 </div>
